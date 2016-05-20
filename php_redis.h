@@ -223,6 +223,9 @@ PHP_METHOD(Redis, getPersistentID);
 PHP_METHOD(Redis, getAuth);
 PHP_METHOD(Redis, getMode);
 
+/* GEO */
+PHP_METHOD(Redis, geoAdd);
+
 #ifdef ZTS
 #include "TSRM.h"
 #endif

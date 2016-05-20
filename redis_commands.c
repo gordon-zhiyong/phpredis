@@ -2618,6 +2618,62 @@ int redis_hdel_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     return SUCCESS;
 }
 
+/* GEOADD */
+int redis_geoadd_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                   char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    zval *z_args;
+    char *member, *key;
+    size_t member_len, key_len;
+    int argc = ZEND_NUM_ARGS(), i, member_free, key_free;
+    smart_string cmdstr = {0};
+
+    z_args = (zval *) safe_emalloc(sizeof(zval), argc, 0);
+    if(zend_get_parameters_array(ht, argc, z_args) == FAILURE) {
+        efree(z_args);
+        return FAILURE;
+    }
+
+    if(argc < 4 || (argc-1)%3 != 0) {
+        efree(z_args);
+        return FAILURE;
+    }
+
+    convert_to_string(&z_args[0]);
+    
+    // Prefix our key
+    key = Z_STRVAL(z_args[0]);
+    key_len = Z_STRLEN(z_args[0]);
+    key_free = redis_key_prefix(redis_sock, &key, &key_len);
+
+    // Set our slot, free key if we prefixed it
+    CMD_SET_SLOT(slot, key, key_len);
+    if(key_free) efree(key);
+
+    redis_cmd_init_sstr(&cmdstr, argc, "GEOADD", sizeof("GEOADD")-1);
+    redis_cmd_append_sstr(&cmdstr, key, key_len);
+
+    for (i=1; i<argc; i+=3) {
+        member_free = redis_serialize(redis_sock, &z_args[i+2], &member, &member_len
+            TSRMLS_CC);
+
+        redis_cmd_append_sstr_dbl(&cmdstr, zval_get_double(&z_args[i]));
+        redis_cmd_append_sstr_dbl(&cmdstr, zval_get_double(&z_args[i+1]));
+        redis_cmd_append_sstr(&cmdstr, member, member_len);
+
+        // Free value if we serialized
+        if(member_free) efree(member);
+    }
+
+    *cmd     = cmdstr.c;
+    *cmd_len = cmdstr.len;
+
+    // Cleanup args
+    efree(z_args);
+
+    return SUCCESS;
+}
+
 /* ZADD */
 int redis_zadd_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
                    char **cmd, int *cmd_len, short *slot, void **ctx)
@@ -2721,7 +2777,6 @@ int redis_object_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     // Success
     return SUCCESS;
 }
-
 /* DEL */
 int redis_del_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
                   char **cmd, int *cmd_len, short *slot, void **ctx)

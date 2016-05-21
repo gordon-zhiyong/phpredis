@@ -2723,6 +2723,55 @@ int redis_geohash_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     return SUCCESS;
 }
 
+/* GEOPOS */
+int redis_geopos_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                   char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    zval *z_args;
+    char *key, *val;
+    size_t key_len, val_len;
+    int key_free, val_free;
+    int argc = ZEND_NUM_ARGS(), i;
+    smart_string cmdstr = {0};
+
+    if (argc < 2) {
+        return FAILURE;
+    }
+
+    z_args = (zval *) safe_emalloc(sizeof(zval), argc, 0);
+    if (zend_get_parameters_array(ht, argc, z_args) == FAILURE) {
+        efree(z_args);
+        return FAILURE;
+    }
+
+    convert_to_string(&z_args[0]);
+    key = Z_STRVAL(z_args[0]);
+    key_len = Z_STRLEN(z_args[0]);
+    key_free = redis_key_prefix(redis_sock, &key, &key_len);
+
+    // Start command construction
+    redis_cmd_init_sstr(&cmdstr, argc, "GEOPOS", sizeof("GEOPOS")-1);
+    redis_cmd_append_sstr(&cmdstr, key, key_len);
+
+    // Set our slot, free key if we prefixed it
+    CMD_SET_SLOT(slot, key, key_len);
+    if(key_free) efree(key);
+
+    for (i=1; i<argc; i++) {
+        val_free = redis_serialize(redis_sock, &z_args[i], &val, &val_len
+            TSRMLS_CC);
+        redis_cmd_append_sstr(&cmdstr, val, val_len);
+        if (val_free) efree(val);
+    }
+
+    *cmd     = cmdstr.c;
+    *cmd_len = cmdstr.len;
+
+    // Cleanup args
+    efree(z_args);
+    return SUCCESS;
+}
+
 /* ZADD */
 int redis_zadd_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
                    char **cmd, int *cmd_len, short *slot, void **ctx)

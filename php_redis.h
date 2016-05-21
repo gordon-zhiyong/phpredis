@@ -225,6 +225,7 @@ PHP_METHOD(Redis, getMode);
 
 /* GEO */
 PHP_METHOD(Redis, geoAdd);
+PHP_METHOD(Redis, geoHash);
 
 #ifdef ZTS
 #include "TSRM.h"

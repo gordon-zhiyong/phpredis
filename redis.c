@@ -311,6 +311,7 @@ static zend_function_entry redis_functions[] = {
      PHP_ME(Redis, geoAdd, NULL, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, geoHash, NULL, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, geoPos, NULL, ZEND_ACC_PUBLIC)
+     PHP_ME(Redis, geoDist, NULL, ZEND_ACC_PUBLIC)
 
      /* aliases */
      PHP_MALIAS(Redis, open, connect, NULL, ZEND_ACC_PUBLIC)
@@ -3943,4 +3944,11 @@ PHP_METHOD(Redis, geoPos) {
     REDIS_PROCESS_CMD(geopos, redis_read_variant_reply);
 }
 /* }}} */
+
+/* {{{ proto long Redis::geoPos(string key, string member1, string member2, string unit) */
+PHP_METHOD(Redis, geoDist) {
+    REDIS_PROCESS_CMD(geodist, redis_string_response);
+}
+/* }}} */
+
 /* vim: set tabstop=4 softtabstop=4 noexpandtab shiftwidth=4: */

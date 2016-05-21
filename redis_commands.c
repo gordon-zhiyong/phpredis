@@ -2772,6 +2772,43 @@ int redis_geopos_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     return SUCCESS;
 }
 
+/* GEODIST */
+int redis_geodist_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                   char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    char *key, *member, *member2, *unit = "m";
+    size_t key_len, member_len, member2_len, unit_len = sizeof("m") - 1;
+    int key_free, member_free, member2_free, unit_free;
+
+    smart_string cmdstr = {0};
+
+    if(zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sss|s", &key, &key_len,
+                             &member, &member_len, &member2, &member2_len,
+                             &unit, &unit_len)==FAILURE)
+    {
+        return FAILURE;
+    }
+
+    key_free = redis_key_prefix(redis_sock, &key, &key_len);
+
+    // Start command construction
+    redis_cmd_init_sstr(&cmdstr, 4, "GEODIST", sizeof("GEODIST")-1);
+    redis_cmd_append_sstr(&cmdstr, key, key_len);
+
+    // Set our slot, free key if we prefixed it
+    CMD_SET_SLOT(slot, key, key_len);
+    if(key_free) efree(key);
+
+    redis_cmd_append_sstr(&cmdstr, member, member_len);
+    redis_cmd_append_sstr(&cmdstr, member2, member2_len);
+    redis_cmd_append_sstr(&cmdstr, unit, unit_len);
+
+    *cmd     = cmdstr.c;
+    *cmd_len = cmdstr.len;
+
+    return SUCCESS;
+}
+
 /* ZADD */
 int redis_zadd_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
                    char **cmd, int *cmd_len, short *slot, void **ctx)

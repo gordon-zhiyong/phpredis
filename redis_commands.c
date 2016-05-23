@@ -2760,8 +2760,6 @@ int redis_geoinfo_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     *cmd     = cmdstr.c;
     *cmd_len = cmdstr.len;
 
-    php_printf("command: %s\n", cmdstr.c, cmdstr.len);
-
     return SUCCESS;
 }
 

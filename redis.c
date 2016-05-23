@@ -3935,13 +3935,13 @@ PHP_METHOD(Redis, geoAdd) {
 
 /* {{{ proto long Redis::geoHash(string key, string member) */
 PHP_METHOD(Redis, geoHash) {
-    REDIS_PROCESS_CMD(geohash, redis_mbulk_reply_raw);
+    REDIS_PROCESS_KW_CMD("GEOHASH", redis_geoinfo_cmd, redis_mbulk_reply_raw);
 }
 /* }}} */
 
 /* {{{ proto long Redis::geoPos(string key, string member) */
 PHP_METHOD(Redis, geoPos) {
-    REDIS_PROCESS_CMD(geopos, redis_read_variant_reply);
+    REDIS_PROCESS_KW_CMD("GEOPOS", redis_geoinfo_cmd, redis_read_variant_reply);
 }
 /* }}} */
 

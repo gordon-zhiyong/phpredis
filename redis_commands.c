@@ -2625,7 +2625,8 @@ int redis_geoadd_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     zval *z_args;
     char *member, *key;
     size_t member_len, key_len;
-    int argc = ZEND_NUM_ARGS(), i, member_free, key_free;
+    int argc = ZEND_NUM_ARGS(), i, member_free, key_free, ht_len = 0;
+    HashTable *ht;
     smart_string cmdstr = {0};
 
     z_args = (zval *) safe_emalloc(sizeof(zval), argc, 0);
@@ -2635,8 +2636,17 @@ int redis_geoadd_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     }
 
     if(argc < 4 || (argc-1)%3 != 0) {
-        efree(z_args);
-        return FAILURE;
+        if (Z_TYPE_P(&z_args[1]) == IS_ARRAY) {
+            ht = Z_ARRVAL_P(&z_args[1]);
+            ht_len = zend_hash_num_elements(ht);
+            if (ht_len < 3 || ht_len % 3 != 0) {
+                efree(z_args);
+                return FAILURE;
+            }
+        } else {
+            efree(z_args);
+            return FAILURE;
+        }
     }
 
     convert_to_string(&z_args[0]);
@@ -2650,19 +2660,42 @@ int redis_geoadd_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     CMD_SET_SLOT(slot, key, key_len);
     if(key_free) efree(key);
 
-    redis_cmd_init_sstr(&cmdstr, argc, "GEOADD", sizeof("GEOADD")-1);
+    if (ht_len > 0) {
+        redis_cmd_init_sstr(&cmdstr, ht_len + 1, "GEOADD", sizeof("GEOADD")-1);
+    } else {
+        redis_cmd_init_sstr(&cmdstr, argc, "GEOADD", sizeof("GEOADD")-1);
+    }
     redis_cmd_append_sstr(&cmdstr, key, key_len);
 
-    for (i=1; i<argc; i+=3) {
-        member_free = redis_serialize(redis_sock, &z_args[i+2], &member, &member_len
-            TSRMLS_CC);
+    if (ht_len > 0) {
+        zval *val;
+        int is_free;
+        
+        for(zend_hash_internal_pointer_reset(ht);
+            zend_hash_has_more_elements(ht) == SUCCESS;
+            zend_hash_move_forward(ht))
+        {
+            val = zend_hash_get_current_data(ht);
+            if (Z_TYPE_P(val) == IS_STRING) {
+                is_free = redis_serialize(redis_sock, val, &member, &member_len);
+                redis_cmd_append_sstr(&cmdstr, Z_STRVAL_P(val), Z_STRLEN_P(val));
+                if (is_free) efree(member);
+            } else {
+                redis_cmd_append_sstr_dbl(&cmdstr, zval_get_double(val));
+            }            
+        }
+    } else {
+        for (i=1; i<argc; i+=3) {
+            member_free = redis_serialize(redis_sock, &z_args[i+2], &member, &member_len
+                TSRMLS_CC);
 
-        redis_cmd_append_sstr_dbl(&cmdstr, zval_get_double(&z_args[i]));
-        redis_cmd_append_sstr_dbl(&cmdstr, zval_get_double(&z_args[i+1]));
-        redis_cmd_append_sstr(&cmdstr, member, member_len);
+            redis_cmd_append_sstr_dbl(&cmdstr, zval_get_double(&z_args[i]));
+            redis_cmd_append_sstr_dbl(&cmdstr, zval_get_double(&z_args[i+1]));
+            redis_cmd_append_sstr(&cmdstr, member, member_len);
 
-        // Free value if we serialized
-        if(member_free) efree(member);
+            // Free value if we serialized
+            if(member_free) efree(member);
+        }
     }
 
     *cmd     = cmdstr.c;
@@ -2778,7 +2811,7 @@ int redis_geodist_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
 {
     char *key, *member, *member2, *unit = "m";
     size_t key_len, member_len, member2_len, unit_len = sizeof("m") - 1;
-    int key_free, member_free, member2_free, unit_free;
+    int key_free;
 
     smart_string cmdstr = {0};
 

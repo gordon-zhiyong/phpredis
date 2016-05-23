@@ -2677,9 +2677,7 @@ int redis_geoadd_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
         {
             val = zend_hash_get_current_data(ht);
             if (Z_TYPE_P(val) == IS_STRING) {
-                is_free = redis_serialize(redis_sock, val, &member, &member_len);
                 redis_cmd_append_sstr(&cmdstr, Z_STRVAL_P(val), Z_STRLEN_P(val));
-                if (is_free) efree(member);
             } else {
                 redis_cmd_append_sstr_dbl(&cmdstr, zval_get_double(val));
             }            
@@ -2714,10 +2712,11 @@ int redis_geohash_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     zval *z_args;
     char *key, *val;
     size_t key_len, val_len;
-    int key_free, val_free;
-    int argc = ZEND_NUM_ARGS(), i;
+    int key_free, val_free, ht_argc;
+    int argc = ZEND_NUM_ARGS(), i, cmd_argc_num = ZEND_NUM_ARGS();
     smart_string cmdstr = {0};
-
+    HashTable *ht_args;
+    
     if (argc < 2) {
         return FAILURE;
     }
@@ -2734,7 +2733,14 @@ int redis_geohash_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     key_free = redis_key_prefix(redis_sock, &key, &key_len);
 
     // Start command construction
-    redis_cmd_init_sstr(&cmdstr, argc, "GEOHASH", sizeof("GEOHASH")-1);
+    if (Z_TYPE_P(&z_args[1]) == IS_ARRAY) {
+        cmd_argc_num = 1;
+        for (i=1; i < argc; i++) {
+            cmd_argc_num += zend_hash_num_elements(Z_ARRVAL_P(&z_args[i]));
+        }
+    }
+
+    redis_cmd_init_sstr(&cmdstr, cmd_argc_num, "GEOHASH", sizeof("GEOHASH")-1);
     redis_cmd_append_sstr(&cmdstr, key, key_len);
 
     // Set our slot, free key if we prefixed it
@@ -2742,10 +2748,23 @@ int redis_geohash_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     if(key_free) efree(key);
 
     for (i=1; i<argc; i++) {
-        val_free = redis_serialize(redis_sock, &z_args[i], &val, &val_len
+        zval *ht_arg_val;
+        if (Z_TYPE_P(&z_args[i]) == IS_ARRAY) {
+            ht_args = Z_ARRVAL_P(&z_args[i]);
+            for(zend_hash_internal_pointer_reset(ht_args);
+                zend_hash_has_more_elements(ht_args) == SUCCESS;
+                zend_hash_move_forward(ht_args))
+            {
+                ht_arg_val = zend_hash_get_current_data(ht_args);
+                convert_to_string(ht_arg_val);
+                redis_cmd_append_sstr(&cmdstr, Z_STRVAL_P(ht_arg_val), Z_STRLEN_P(ht_arg_val));
+            }
+        } else {
+            val_free = redis_serialize(redis_sock, &z_args[i], &val, &val_len
             TSRMLS_CC);
-        redis_cmd_append_sstr(&cmdstr, val, val_len);
-        if (val_free) efree(val);
+            redis_cmd_append_sstr(&cmdstr, val, val_len);
+            if (val_free) efree(val);
+        }
     }
 
     *cmd     = cmdstr.c;
@@ -2766,7 +2785,6 @@ int redis_geopos_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     int key_free, val_free;
     int argc = ZEND_NUM_ARGS(), i;
     smart_string cmdstr = {0};
-
     if (argc < 2) {
         return FAILURE;
     }

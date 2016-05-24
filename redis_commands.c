@@ -2748,7 +2748,7 @@ int redis_geoinfo_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
         redis_cmd_init_sstr(&cmdstr, ZEND_NUM_ARGS(), kw, strlen(kw));
         redis_cmd_append_sstr(&cmdstr, key, key_len);
         
-        is_free = redis_serialize(redis_sock, zval_member, &member, &member_len);
+        is_free = redis_serialize(redis_sock, zval_member, &member, &member_len TSRMLS_CC);
         redis_cmd_append_sstr(&cmdstr, member, member_len);
 
         if (is_free) efree(member);
@@ -2793,6 +2793,71 @@ int redis_geodist_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     redis_cmd_append_sstr(&cmdstr, member, member_len);
     redis_cmd_append_sstr(&cmdstr, member2, member2_len);
     redis_cmd_append_sstr(&cmdstr, unit, unit_len);
+
+    *cmd     = cmdstr.c;
+    *cmd_len = cmdstr.len;
+
+    return SUCCESS;
+}
+
+/* GEORADIUS */
+int redis_georadius_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                   char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    char *key, *unit = "m", *count_arg="COUNT";
+    size_t key_len, unit_len = sizeof(unit) -1;
+    double longitude, latitude, radius;
+    uint count;
+    int key_free, num_args=7, opt_argc;
+    HashTable *option_arr = NULL;
+    smart_string cmdstr = {0};
+
+    if(zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sdddl|sh", &key, &key_len,
+                             &longitude, &latitude, &radius, &count,
+                             &unit, &unit_len, &option_arr)==FAILURE)
+    {
+        return FAILURE;
+    }
+
+    key_free = redis_key_prefix(redis_sock, &key, &key_len);
+    if (option_arr && (opt_argc = zend_hash_num_elements(option_arr)) > 0) {
+        num_args += opt_argc;
+    }
+
+    redis_cmd_init_sstr(&cmdstr, num_args, "GEORADIUS", sizeof("GEORADIUS")-1);
+    redis_cmd_append_sstr(&cmdstr, key, key_len);
+    
+    CMD_SET_SLOT(slot, key, key_len);
+    if(key_free) efree(key);
+    
+    redis_cmd_append_sstr_dbl(&cmdstr, longitude);
+    redis_cmd_append_sstr_dbl(&cmdstr, latitude);
+    redis_cmd_append_sstr_dbl(&cmdstr, radius);
+    redis_cmd_append_sstr(&cmdstr, unit, unit_len);
+    redis_cmd_append_sstr(&cmdstr, count_arg, strlen(count_arg));
+    redis_cmd_append_sstr_int(&cmdstr, count);
+
+    if (option_arr && opt_argc > 0) {
+        int type;
+        zval *opt_val;
+        zend_ulong idx;
+        char *k;
+
+        /* Iterate our option array */
+        for(zend_hash_internal_pointer_reset(option_arr);
+            zend_hash_has_more_elements(option_arr) == SUCCESS;
+            zend_hash_move_forward(option_arr))
+        {
+            // Grab key and value
+            type = zend_hash_get_current_key(option_arr, &k, &idx);
+            opt_val = zend_hash_get_current_data(option_arr);
+            if (type == HASH_KEY_IS_STRING) {
+                redis_cmd_append_sstr(&cmdstr, k, sizeof(k) - 1);
+            } else {
+                redis_cmd_append_sstr(&cmdstr, Z_STRVAL_P(opt_val), Z_STRLEN_P(opt_val));
+            }
+        }
+    }
 
     *cmd     = cmdstr.c;
     *cmd_len = cmdstr.len;

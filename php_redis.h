@@ -229,6 +229,7 @@ PHP_METHOD(Redis, geoHash);
 PHP_METHOD(Redis, geoPos);
 PHP_METHOD(Redis, geoDist);
 PHP_METHOD(Redis, geoRadius);
+PHP_METHOD(Redis, geoRadiusByMember);
 
 #ifdef ZTS
 #include "TSRM.h"

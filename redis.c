@@ -313,6 +313,7 @@ static zend_function_entry redis_functions[] = {
      PHP_ME(Redis, geoPos, NULL, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, geoDist, NULL, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, geoRadius, NULL, ZEND_ACC_PUBLIC)
+     PHP_ME(Redis, geoRadiusByMember, NULL, ZEND_ACC_PUBLIC)
 
      /* aliases */
      PHP_MALIAS(Redis, open, connect, NULL, ZEND_ACC_PUBLIC)
@@ -3955,6 +3956,11 @@ PHP_METHOD(Redis, geoDist) {
 /* {{{ proto long Redis::geoRadius(string key, double longitude, double latitude, double radius, int count, [string unit]) */
 PHP_METHOD(Redis, geoRadius) {
     REDIS_PROCESS_CMD(georadius, redis_read_variant_reply);
+}
+/* }}} */
+/* {{{ proto long Redis::geoRadius(string key, double longitude, double latitude, double radius, int count, [string unit]) */
+PHP_METHOD(Redis, geoRadiusByMember) {
+    REDIS_PROCESS_CMD(georadiusbymember, redis_read_variant_reply);
 }
 /* }}} */
 

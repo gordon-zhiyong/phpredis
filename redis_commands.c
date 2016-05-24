@@ -2841,7 +2841,7 @@ int redis_georadius_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
         int type;
         zval *opt_val;
         zend_ulong idx;
-        char *k;
+        zend_string *k;
 
         /* Iterate our option array */
         for(zend_hash_internal_pointer_reset(option_arr);
@@ -2852,7 +2852,71 @@ int redis_georadius_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
             type = zend_hash_get_current_key(option_arr, &k, &idx);
             opt_val = zend_hash_get_current_data(option_arr);
             if (type == HASH_KEY_IS_STRING) {
-                redis_cmd_append_sstr(&cmdstr, k, sizeof(k) - 1);
+                redis_cmd_append_sstr(&cmdstr, ZSTR_VAL(k), ZSTR_LEN(k));
+            } else {
+                redis_cmd_append_sstr(&cmdstr, Z_STRVAL_P(opt_val), Z_STRLEN_P(opt_val));
+            }
+        }
+    }
+
+    *cmd     = cmdstr.c;
+    *cmd_len = cmdstr.len;
+
+    return SUCCESS;
+}
+
+/* GEORADIUSBYMEMBER */
+int redis_georadiusbymember_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+    char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    char *key, *unit = "m", *count_arg="COUNT", *member;
+    size_t key_len, unit_len = sizeof(unit) -1, member_len;
+    double radius;
+    uint count;
+    int key_free, num_args=6, opt_argc;
+    HashTable *option_arr = NULL;
+    smart_string cmdstr = {0};
+
+    if(zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ssdl|sh", &key, &key_len,
+                             &member, &member_len,
+                             &radius, &count, &unit, &unit_len, &option_arr)==FAILURE)
+    {
+        return FAILURE;
+    }
+
+    key_free = redis_key_prefix(redis_sock, &key, &key_len);
+    if (option_arr && (opt_argc = zend_hash_num_elements(option_arr)) > 0) {
+        num_args += opt_argc;
+    }
+
+    redis_cmd_init_sstr(&cmdstr, num_args, "GEORADIUSBYMEMBER", sizeof("GEORADIUSBYMEMBER")-1);
+    redis_cmd_append_sstr(&cmdstr, key, key_len);
+    redis_cmd_append_sstr(&cmdstr, member, member_len);
+    
+    CMD_SET_SLOT(slot, key, key_len);
+    if(key_free) efree(key);
+
+    redis_cmd_append_sstr_dbl(&cmdstr, radius);
+    redis_cmd_append_sstr(&cmdstr, unit, unit_len);
+    redis_cmd_append_sstr(&cmdstr, count_arg, strlen(count_arg));
+    redis_cmd_append_sstr_int(&cmdstr, count);
+
+    if (option_arr && opt_argc > 0) {
+        int type;
+        zval *opt_val;
+        zend_ulong idx;
+        zend_string *k;
+
+        /* Iterate our option array */
+        for(zend_hash_internal_pointer_reset(option_arr);
+            zend_hash_has_more_elements(option_arr) == SUCCESS;
+            zend_hash_move_forward(option_arr))
+        {
+            // Grab key and value
+            type = zend_hash_get_current_key(option_arr, &k, &idx);
+            opt_val = zend_hash_get_current_data(option_arr);
+            if (type == HASH_KEY_IS_STRING) {
+                redis_cmd_append_sstr(&cmdstr, ZSTR_VAL(k), ZSTR_LEN(k));
             } else {
                 redis_cmd_append_sstr(&cmdstr, Z_STRVAL_P(opt_val), Z_STRLEN_P(opt_val));
             }

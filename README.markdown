@@ -3054,6 +3054,33 @@ $ret = FALSE if x has been modified between the call to WATCH and the call to EX
 ~~~
 
 
+## GEO
+* [geoAdd](#geoadd) - Add one or more geospatial items in the geospatial index represented using a sorted set
+* [geoHash](#geohash) - Returns members of a geospatial index as standard geohash strings
+* [geoPos](#geopos) - Returns longitude and latitude of members of a geospatial index
+* [geoDist](#geoDist) - Returns the distance between two members of a geospatial index
+* [geoRadius](#geoRadius) - Query a sorted set representing a geospatial index to fetch members matching a given maximum distance from a point
+* [geoRadiusByMember](#geoRadiusByMember) - Query a sorted set representing a geospatial index to fetch members matching a given maximum distance from a member
+
+### geoAdd
+-----
+_**Description**_: Add one or more geospatial items in the geospatial index represented using a sorted set
+
+##### *Parameters*
+*key* string
+*longitude* double
+*latitude* double
+*member* string
+*.....*
+##### *Return value*
+Mixed int|bool add success return true else return false
+##### *Examples*
+~~~
+$redis->geoAdd("geo", 121.525412, 31.245801, 'member'); // Returns an integer: 1
+$redis->geoAdd("geo", 121.524118, 31.244504, 'member_two', 121.530730, 31.241448, 'member_three'); // Returns an integer 2
+$redis->geoAdd('geo', [121.534584, 31.233497, 'member_four', 121.542956, 31.238468, 'member_five']); // Returns an integer 2
+~~~
+
 
 ## Scripting
 

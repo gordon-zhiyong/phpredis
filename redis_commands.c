@@ -2618,6 +2618,254 @@ int redis_hdel_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     return SUCCESS;
 }
 
+/* ZADD */
+int redis_zadd_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                   char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    zval *z_args;
+    char *key, *val;
+	size_t key_len, val_len;
+    int key_free, val_free;
+    int argc = ZEND_NUM_ARGS(), i;
+    smart_string cmdstr = {0};
+
+    z_args = (zval *) safe_emalloc(sizeof(zval), argc, 0);
+    if(zend_get_parameters_array(ht, argc, z_args)==FAILURE) {
+        efree(z_args);
+        return FAILURE;
+    }
+
+    // Need key, score, value, [score, value...] */
+    if(argc>0) convert_to_string(&z_args[0]);
+    if(argc<3 || Z_TYPE(z_args[0])!=IS_STRING || (argc-1)%2 != 0) {
+        efree(z_args);
+        return FAILURE;
+    }
+
+    // Prefix our key
+    key = Z_STRVAL(z_args[0]);
+    key_len = Z_STRLEN(z_args[0]);
+    key_free = redis_key_prefix(redis_sock, &key, &key_len);
+
+    // Start command construction
+    redis_cmd_init_sstr(&cmdstr, argc, "ZADD", sizeof("ZADD")-1);
+    redis_cmd_append_sstr(&cmdstr, key, key_len);
+
+    // Set our slot, free key if we prefixed it
+    CMD_SET_SLOT(slot,key,key_len);
+    if(key_free) efree(key);
+
+    // Now the rest of our arguments
+    for(i=1;i<argc;i+=2) {
+        val_free = redis_serialize(redis_sock, &z_args[i+1], &val, &val_len
+            TSRMLS_CC);
+
+        // Append score and member
+        redis_cmd_append_sstr_dbl(&cmdstr, zval_get_double(&z_args[i]));
+        redis_cmd_append_sstr(&cmdstr, val, val_len);
+
+        // Free value if we serialized
+        if(val_free) efree(val);
+    }
+
+    // Push output values
+    *cmd     = cmdstr.c;
+    *cmd_len = cmdstr.len;
+
+    // Cleanup args
+    efree(z_args);
+
+    return SUCCESS;
+}
+
+/* OBJECT */
+int redis_object_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                     REDIS_REPLY_TYPE *rtype, char **cmd, int *cmd_len,
+                     short *slot, void **ctx)
+{
+    char *key, *subcmd;
+    size_t key_len, subcmd_len;
+    int key_free;
+
+    if(zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ss", &subcmd,
+                             &subcmd_len, &key, &key_len)==FAILURE)
+    {
+        return FAILURE;
+    }
+
+    // Prefix our key
+    key_free = redis_key_prefix(redis_sock, &key,  &key_len);
+
+    // Format our command
+    *cmd_len = redis_cmd_format_static(cmd, "OBJECT", "ss", subcmd, subcmd_len,
+        key, key_len);
+
+    // Set our slot, free key if we prefixed
+    CMD_SET_SLOT(slot,key,key_len);
+    if(key_free) efree(key);
+
+    // Push the reply type to our caller
+    if(subcmd_len == 8 && (!strncasecmp(subcmd,"refcount",8) ||
+                           !strncasecmp(subcmd,"idletime",8)))
+    {
+        *rtype = TYPE_INT;
+    } else if(subcmd_len == 8 && !strncasecmp(subcmd, "encoding", 8)) {
+        *rtype = TYPE_BULK;
+    } else {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING,
+            "Invalid subcommand sent to OBJECT");
+        efree(*cmd);
+        return FAILURE;
+    }
+
+    // Success
+    return SUCCESS;
+}
+/* DEL */
+int redis_del_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                  char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+        "DEL", sizeof("DEL")-1, 1, 0, cmd, cmd_len, slot);
+}
+
+/* WATCH */
+int redis_watch_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                    char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+        "WATCH", sizeof("WATCH")-1, 1, 0, cmd, cmd_len, slot);
+}
+
+/* BLPOP */
+int redis_blpop_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                    char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+        "BLPOP", sizeof("BLPOP")-1, 2, 1, cmd, cmd_len, slot);
+}
+
+/* BRPOP */
+int redis_brpop_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                    char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+        "BRPOP", sizeof("BRPOP")-1, 1, 1, cmd, cmd_len, slot);
+}
+
+/* SINTER */
+int redis_sinter_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                     char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+        "SINTER", sizeof("SINTER")-1, 1, 0, cmd, cmd_len, slot);
+}
+
+/* SINTERSTORE */
+int redis_sinterstore_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                          char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+        "SINTERSTORE", sizeof("SINTERSTORE")-1, 1, 0, cmd, cmd_len, slot);
+}
+
+/* SUNION */
+int redis_sunion_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                     char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+        "SUNION", sizeof("SUNION")-1, 1, 0, cmd, cmd_len, slot);
+}
+
+/* SUNIONSTORE */
+int redis_sunionstore_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                          char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+        "SUNIONSTORE", sizeof("SUNIONSTORE")-1, 2, 0, cmd, cmd_len, slot);
+}
+
+/* SDIFF */
+int redis_sdiff_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                    char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, "SDIFF",
+        sizeof("SDIFF")-1, 1, 0, cmd, cmd_len, slot);
+}
+
+/* SDIFFSTORE */
+int redis_sdiffstore_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                         char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+        "SDIFFSTORE", sizeof("SDIFFSTORE")-1, 1, 0, cmd, cmd_len, slot);
+}
+
+/* COMMAND */
+int redis_command_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                      char **cmd, int *cmd_len, short *slot, void **ctx)
+{
+    char *kw=NULL;
+    zval *z_arg;
+    size_t kw_len;
+
+    /* Parse our args */
+    if(zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|sz", &kw, &kw_len,
+                             &z_arg)==FAILURE)
+    {
+        return FAILURE;
+    }
+
+    /* Construct our command */
+    if(!kw) {
+        *cmd_len = redis_cmd_format_static(cmd, "COMMAND", "");
+    } else if(kw && !z_arg) {
+        /* Sanity check */
+        if(strncasecmp(kw, "info", sizeof("info")-1) ||
+           Z_TYPE_P(z_arg)!=IS_STRING)
+        {
+            return FAILURE;
+        }
+
+        /* COMMAND INFO <cmd> */
+        *cmd_len = redis_cmd_format_static(cmd, "COMMAND", "ss", "INFO",
+            sizeof("INFO")-1, Z_STRVAL_P(z_arg), Z_STRLEN_P(z_arg));
+    } else {
+        int arr_len;
+
+        /* Sanity check on args */
+        if(strncasecmp(kw, "getkeys", sizeof("getkeys")-1) ||
+           Z_TYPE_P(z_arg)!=IS_ARRAY ||
+           (arr_len=zend_hash_num_elements(Z_ARRVAL_P(z_arg)))<1)
+        {
+            return FAILURE;
+        }
+
+        zval *z_ele;
+        HashTable *ht_arr = Z_ARRVAL_P(z_arg);
+        smart_string cmdstr = {0};
+
+        redis_cmd_init_sstr(&cmdstr, 1 + arr_len, "COMMAND", sizeof("COMMAND")-1);
+        redis_cmd_append_sstr(&cmdstr, "GETKEYS", sizeof("GETKEYS")-1);
+
+        for(zend_hash_internal_pointer_reset(ht_arr);
+            (z_ele = zend_hash_get_current_data(ht_arr)) != NULL;
+            zend_hash_move_forward(ht_arr))
+        {
+            convert_to_string(z_ele);
+            redis_cmd_append_sstr(&cmdstr, Z_STRVAL_P(z_ele), Z_STRLEN_P(z_ele));
+        }
+
+        *cmd = cmdstr.c;
+        *cmd_len = cmdstr.len;
+    }
+
+    /* Any slot will do */
+    CMD_RAND_SLOT(slot);
+
+    return SUCCESS;
+}
+
 /* GEOADD */
 int redis_geoadd_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
                    char **cmd, int *cmd_len, short *slot, void **ctx)
@@ -2925,254 +3173,6 @@ int redis_georadiusbymember_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_s
 
     *cmd     = cmdstr.c;
     *cmd_len = cmdstr.len;
-
-    return SUCCESS;
-}
-
-/* ZADD */
-int redis_zadd_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
-                   char **cmd, int *cmd_len, short *slot, void **ctx)
-{
-    zval *z_args;
-    char *key, *val;
-	size_t key_len, val_len;
-    int key_free, val_free;
-    int argc = ZEND_NUM_ARGS(), i;
-    smart_string cmdstr = {0};
-
-    z_args = (zval *) safe_emalloc(sizeof(zval), argc, 0);
-    if(zend_get_parameters_array(ht, argc, z_args)==FAILURE) {
-        efree(z_args);
-        return FAILURE;
-    }
-
-    // Need key, score, value, [score, value...] */
-    if(argc>0) convert_to_string(&z_args[0]);
-    if(argc<3 || Z_TYPE(z_args[0])!=IS_STRING || (argc-1)%2 != 0) {
-        efree(z_args);
-        return FAILURE;
-    }
-
-    // Prefix our key
-    key = Z_STRVAL(z_args[0]);
-    key_len = Z_STRLEN(z_args[0]);
-    key_free = redis_key_prefix(redis_sock, &key, &key_len);
-
-    // Start command construction
-    redis_cmd_init_sstr(&cmdstr, argc, "ZADD", sizeof("ZADD")-1);
-    redis_cmd_append_sstr(&cmdstr, key, key_len);
-
-    // Set our slot, free key if we prefixed it
-    CMD_SET_SLOT(slot,key,key_len);
-    if(key_free) efree(key);
-
-    // Now the rest of our arguments
-    for(i=1;i<argc;i+=2) {
-        val_free = redis_serialize(redis_sock, &z_args[i+1], &val, &val_len
-            TSRMLS_CC);
-
-        // Append score and member
-        redis_cmd_append_sstr_dbl(&cmdstr, zval_get_double(&z_args[i]));
-        redis_cmd_append_sstr(&cmdstr, val, val_len);
-
-        // Free value if we serialized
-        if(val_free) efree(val);
-    }
-
-    // Push output values
-    *cmd     = cmdstr.c;
-    *cmd_len = cmdstr.len;
-
-    // Cleanup args
-    efree(z_args);
-
-    return SUCCESS;
-}
-
-/* OBJECT */
-int redis_object_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
-                     REDIS_REPLY_TYPE *rtype, char **cmd, int *cmd_len,
-                     short *slot, void **ctx)
-{
-    char *key, *subcmd;
-    size_t key_len, subcmd_len;
-    int key_free;
-
-    if(zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ss", &subcmd,
-                             &subcmd_len, &key, &key_len)==FAILURE)
-    {
-        return FAILURE;
-    }
-
-    // Prefix our key
-    key_free = redis_key_prefix(redis_sock, &key,  &key_len);
-
-    // Format our command
-    *cmd_len = redis_cmd_format_static(cmd, "OBJECT", "ss", subcmd, subcmd_len,
-        key, key_len);
-
-    // Set our slot, free key if we prefixed
-    CMD_SET_SLOT(slot,key,key_len);
-    if(key_free) efree(key);
-
-    // Push the reply type to our caller
-    if(subcmd_len == 8 && (!strncasecmp(subcmd,"refcount",8) ||
-                           !strncasecmp(subcmd,"idletime",8)))
-    {
-        *rtype = TYPE_INT;
-    } else if(subcmd_len == 8 && !strncasecmp(subcmd, "encoding", 8)) {
-        *rtype = TYPE_BULK;
-    } else {
-        php_error_docref(NULL TSRMLS_CC, E_WARNING,
-            "Invalid subcommand sent to OBJECT");
-        efree(*cmd);
-        return FAILURE;
-    }
-
-    // Success
-    return SUCCESS;
-}
-/* DEL */
-int redis_del_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
-                  char **cmd, int *cmd_len, short *slot, void **ctx)
-{
-    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
-        "DEL", sizeof("DEL")-1, 1, 0, cmd, cmd_len, slot);
-}
-
-/* WATCH */
-int redis_watch_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
-                    char **cmd, int *cmd_len, short *slot, void **ctx)
-{
-    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
-        "WATCH", sizeof("WATCH")-1, 1, 0, cmd, cmd_len, slot);
-}
-
-/* BLPOP */
-int redis_blpop_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
-                    char **cmd, int *cmd_len, short *slot, void **ctx)
-{
-    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
-        "BLPOP", sizeof("BLPOP")-1, 2, 1, cmd, cmd_len, slot);
-}
-
-/* BRPOP */
-int redis_brpop_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
-                    char **cmd, int *cmd_len, short *slot, void **ctx)
-{
-    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
-        "BRPOP", sizeof("BRPOP")-1, 1, 1, cmd, cmd_len, slot);
-}
-
-/* SINTER */
-int redis_sinter_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
-                     char **cmd, int *cmd_len, short *slot, void **ctx)
-{
-    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
-        "SINTER", sizeof("SINTER")-1, 1, 0, cmd, cmd_len, slot);
-}
-
-/* SINTERSTORE */
-int redis_sinterstore_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
-                          char **cmd, int *cmd_len, short *slot, void **ctx)
-{
-    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
-        "SINTERSTORE", sizeof("SINTERSTORE")-1, 1, 0, cmd, cmd_len, slot);
-}
-
-/* SUNION */
-int redis_sunion_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
-                     char **cmd, int *cmd_len, short *slot, void **ctx)
-{
-    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
-        "SUNION", sizeof("SUNION")-1, 1, 0, cmd, cmd_len, slot);
-}
-
-/* SUNIONSTORE */
-int redis_sunionstore_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
-                          char **cmd, int *cmd_len, short *slot, void **ctx)
-{
-    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
-        "SUNIONSTORE", sizeof("SUNIONSTORE")-1, 2, 0, cmd, cmd_len, slot);
-}
-
-/* SDIFF */
-int redis_sdiff_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
-                    char **cmd, int *cmd_len, short *slot, void **ctx)
-{
-    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, "SDIFF",
-        sizeof("SDIFF")-1, 1, 0, cmd, cmd_len, slot);
-}
-
-/* SDIFFSTORE */
-int redis_sdiffstore_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
-                         char **cmd, int *cmd_len, short *slot, void **ctx)
-{
-    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
-        "SDIFFSTORE", sizeof("SDIFFSTORE")-1, 1, 0, cmd, cmd_len, slot);
-}
-
-/* COMMAND */
-int redis_command_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
-                      char **cmd, int *cmd_len, short *slot, void **ctx)
-{
-    char *kw=NULL;
-    zval *z_arg;
-    size_t kw_len;
-
-    /* Parse our args */
-    if(zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|sz", &kw, &kw_len,
-                             &z_arg)==FAILURE)
-    {
-        return FAILURE;
-    }
-
-    /* Construct our command */
-    if(!kw) {
-        *cmd_len = redis_cmd_format_static(cmd, "COMMAND", "");
-    } else if(kw && !z_arg) {
-        /* Sanity check */
-        if(strncasecmp(kw, "info", sizeof("info")-1) ||
-           Z_TYPE_P(z_arg)!=IS_STRING)
-        {
-            return FAILURE;
-        }
-
-        /* COMMAND INFO <cmd> */
-        *cmd_len = redis_cmd_format_static(cmd, "COMMAND", "ss", "INFO",
-            sizeof("INFO")-1, Z_STRVAL_P(z_arg), Z_STRLEN_P(z_arg));
-    } else {
-        int arr_len;
-
-        /* Sanity check on args */
-        if(strncasecmp(kw, "getkeys", sizeof("getkeys")-1) ||
-           Z_TYPE_P(z_arg)!=IS_ARRAY ||
-           (arr_len=zend_hash_num_elements(Z_ARRVAL_P(z_arg)))<1)
-        {
-            return FAILURE;
-        }
-
-        zval *z_ele;
-        HashTable *ht_arr = Z_ARRVAL_P(z_arg);
-        smart_string cmdstr = {0};
-
-        redis_cmd_init_sstr(&cmdstr, 1 + arr_len, "COMMAND", sizeof("COMMAND")-1);
-        redis_cmd_append_sstr(&cmdstr, "GETKEYS", sizeof("GETKEYS")-1);
-
-        for(zend_hash_internal_pointer_reset(ht_arr);
-            (z_ele = zend_hash_get_current_data(ht_arr)) != NULL;
-            zend_hash_move_forward(ht_arr))
-        {
-            convert_to_string(z_ele);
-            redis_cmd_append_sstr(&cmdstr, Z_STRVAL_P(z_ele), Z_STRLEN_P(z_ele));
-        }
-
-        *cmd = cmdstr.c;
-        *cmd_len = cmdstr.len;
-    }
-
-    /* Any slot will do */
-    CMD_RAND_SLOT(slot);
 
     return SUCCESS;
 }

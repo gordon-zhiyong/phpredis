@@ -3075,12 +3075,328 @@ _**Description**_: Add one or more geospatial items in the geospatial index repr
 *.....*
 ##### *Return value*
 Mixed int|bool add success return true else return false
-##### *Examples*
+##### *Example*
 ~~~
 $redis->geoAdd("geo", 121.525412, 31.245801, 'member'); // Returns an integer: 1
 $redis->geoAdd("geo", 121.524118, 31.244504, 'member_two', 121.530730, 31.241448, 'member_three'); // Returns an integer 2
 $redis->geoAdd('geo', [121.534584, 31.233497, 'member_four', 121.542956, 31.238468, 'member_five']); // Returns an integer 2
 ~~~
+
+### geoHash
+-----
+_**Description**_: Returns members of a geospatial index as standard geohash strings
+
+##### *Parameters*
+*key* string
+*member* string | array
+*.....*
+##### *Return value*
+Mixed array|bool
+##### *Example*
+~~~
+$redis->geoHash('geo', 'member');
+$redis->geoHash('geo', ['member_two','member_three']);
+~~~
+
+
+Output:
+
+~~~
+Array
+(
+    [0] => wtw3v2h5gr0
+)
+Array
+(
+    [0] => wtw3trghmj0
+    [1] => wtw3trrfxk0
+)
+~~~
+
+### geoPos
+-----
+_**Description**_: Returns longitude and latitude of members of a geospatial index
+##### *Parameters*
+*key* string
+*member* string | array
+*.....*
+##### *Return value*
+Mixed array|bool
+##### *Example*
+~~~
+$redis->geoPos('geo', 'member');
+$redis->geoPos('geo', ['member_two','member_three']);
+~~~
+
+
+Output:
+
+~~~
+Array
+(
+    [0] => Array
+        (
+            [0] => 121.52541071176528931
+            [1] => 31.24580049146515393
+        )
+
+)
+Array
+(
+    [0] => Array
+        (
+            [0] => 121.52411788702011108
+            [1] => 31.24450524895272707
+        )
+
+    [1] => Array
+        (
+            [0] => 121.53073221445083618
+            [1] => 31.24144837523456886
+        )
+
+)
+~~~
+
+### geoDist
+-----
+_**Description**_: Returns the distance between two members of a geospatial index
+##### *Parameters*
+*key* string
+*member* string 
+*member2* string
+*unit* string [m|km|mi|ft] default m
+
+##### *Return value*
+Mixed string|bool
+##### *Example*
+~~~
+$redis->geoDist('geo', 'member', 'member_two');
+$redis->geoDist('geo', 'member', 'member_two', 'km');
+~~~
+
+
+Output:
+
+~~~
+189.3906
+0.1894
+~~~
+
+
+### geoRadius
+-----
+_**Description**_: Query a sorted set representing a geospatial index to fetch members matching a given maximum distance from a point
+##### *Parameters*
+*key* string
+*longitude* double
+*latitude* double
+*radius* double
+*count* int
+*unit* string [m|km|mi|ft] default m
+*options* array
+
+##### *Return value*
+Mixed array|bool
+##### *Example*
+~~~
+$redis->geoRadius('geo', 121.525412, 31.245801, 10, 10, 'km');
+$redis->geoRadius('geo', 121.525412, 31.245801, 10, 10, 'km', ['DESC']);
+$redis->geoRadius('geo', 121.525412, 31.245801, 10, 10, 'km', ['DESC' => 1, 'WITHDIST', 'WITHPOS']);
+~~~
+
+
+Output:
+
+~~~
+Array
+(
+    [0] => member
+    [1] => member_two
+    [2] => member_three
+    [3] => member_four
+    [4] => member_five
+)
+Array
+(
+    [0] => member_five
+    [1] => member_four
+    [2] => member_three
+    [3] => member_two
+    [4] => member
+)
+Array
+(
+
+    [0] => Array
+        (
+            [0] => member_five
+            [1] => 1.8572
+            [2] => Array
+                (
+                    [0] => 121.54295772314071655
+                    [1] => 31.23846754315118091
+                )
+
+        )
+
+    [1] => Array
+        (
+            [0] => member_four
+            [1] => 1.6229
+            [2] => Array
+                (
+                    [0] => 121.53458386659622192
+                    [1] => 31.23349695495772238
+                )
+
+        )
+
+    [2] => Array
+        (
+            [0] => member_three
+            [1] => 0.7002
+            [2] => Array
+                (
+                    [0] => 121.53073221445083618
+                    [1] => 31.24144837523456886
+                )
+
+        )
+
+    [3] => Array
+        (
+            [0] => member_two
+            [1] => 0.1895
+            [2] => Array
+                (
+                    [0] => 121.52411788702011108
+                    [1] => 31.24450524895272707
+                )
+
+        )
+
+    [4] => Array
+        (
+            [0] => member
+            [1] => 0.0001
+            [2] => Array
+                (
+                    [0] => 121.52541071176528931
+                    [1] => 31.24580049146515393
+                )
+
+        )
+
+)
+~~~
+
+### geoRadiusByMember
+-----
+_**Description**_: Query a sorted set representing a geospatial index to fetch members matching a given maximum distance from a member
+##### *Parameters*
+*key* string
+*member* string
+*radius* double
+*count* int
+*unit* string [m|km|mi|ft] default m
+*options* array
+
+##### *Return value*
+Mixed array|bool
+##### *Example*
+~~~
+$redis->geoRadiusByMember('geo', 'member', 10, 10, 'km');
+$redis->geoRadiusByMember('geo', 'member', 10, 10, 'km', ['DESC']);
+$redis->geoRadiusByMember('geo', 'member', 10, 10, 'km', ['DESC' => 1, 'WITHDIST', 'WITHPOS']);
+~~~
+
+
+Output:
+
+~~~
+Array
+(
+    [0] => member
+    [1] => member_two
+    [2] => member_three
+    [3] => member_four
+    [4] => member_five
+)
+Array
+(
+    [0] => member_five
+    [1] => member_four
+    [2] => member_three
+    [3] => member_two
+    [4] => member
+)
+Array
+(
+
+    [0] => Array
+        (
+            [0] => member_five
+            [1] => 1.8572
+            [2] => Array
+                (
+                    [0] => 121.54295772314071655
+                    [1] => 31.23846754315118091
+                )
+
+        )
+
+    [1] => Array
+        (
+            [0] => member_four
+            [1] => 1.6229
+            [2] => Array
+                (
+                    [0] => 121.53458386659622192
+                    [1] => 31.23349695495772238
+                )
+
+        )
+
+    [2] => Array
+        (
+            [0] => member_three
+            [1] => 0.7002
+            [2] => Array
+                (
+                    [0] => 121.53073221445083618
+                    [1] => 31.24144837523456886
+                )
+
+        )
+
+    [3] => Array
+        (
+            [0] => member_two
+            [1] => 0.1895
+            [2] => Array
+                (
+                    [0] => 121.52411788702011108
+                    [1] => 31.24450524895272707
+                )
+
+        )
+
+    [4] => Array
+        (
+            [0] => member
+            [1] => 0.0001
+            [2] => Array
+                (
+                    [0] => 121.52541071176528931
+                    [1] => 31.24580049146515393
+                )
+
+        )
+
+)
+~~~
+
 
 
 ## Scripting

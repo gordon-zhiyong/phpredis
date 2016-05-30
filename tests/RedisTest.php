@@ -4766,5 +4766,105 @@ class Redis_Test extends TestSuite
         $this->redis->rpush('mylist', 'A', 'B', 'C', 'D');
         $this->assertEquals($this->redis->lrange('mylist', 0, -1), Array('A','B','C','D'));
     }
+
+    /* Test a 'geo' commands */
+    public function testGeo() {
+        if (version_compare($this->version, "3.2.0", "<")) {
+            echo "Redis Version: ", $this->version, ".not support geo";
+            return true;
+        }
+        
+        $this->redis->del('my-geo');
+
+        # test geoAdd
+        $this->assertEquals($this->redis->geoAdd('my-geo', 121.525412, 31.245801, 'member'), 1);
+        $this->assertEquals(
+            $this->redis->geoAdd(
+                'my-geo', 121.524118, 31.244504, 'member_two', 121.530730, 31.241448, 'member_three'
+            ), 
+            2
+        ); 
+        
+        $this->assertEquals(
+            $this->redis->geoAdd(
+                'my-geo', [121.534584, 31.233497, 'member_four', 121.542956, 31.238468, 'member_five']
+            ), 
+            2
+        );
+
+        # test geoHash
+        $this->assertEquals($this->redis->geoHash('my-geo', 'member'), ['wtw3v2h5gr0']);
+        $this->assertEquals(
+            $this->redis->geoHash('my-geo', ['member', 'member_two']), 
+            ['wtw3v2h5gr0', 'wtw3trghmj0']
+        );
+
+        # test geoPos
+        $pos = $this->redis->geoPos('my-geo', 'member');
+        $pos[0][0] = number_format($pos[0][0], 6);
+        $pos[0][1] = number_format($pos[0][1], 6);
+
+        $this->assertEquals(
+            $pos,
+            [['121.525411', '31.245800']]
+        );
+
+        $pos = $this->redis->geoPos('my-geo', ['member', 'member_two']);
+        $pos[0][0] = number_format($pos[0][0], 6);
+        $pos[0][1] = number_format($pos[0][1], 6);
+        $pos[1][0] = number_format($pos[1][0], 6);
+        $pos[1][1] = number_format($pos[1][1], 6);
+        $this->assertEquals(
+            $pos,
+            [['121.525411', '31.245800'], ['121.524118', '31.244505']]
+        );
+
+        # test geoDist
+        $this->assertEquals(
+            $this->redis->geoDist('my-geo', 'member', 'member_five'),
+            '1857.3263'
+        );
+        $this->assertEquals(
+            $this->redis->geoDist('my-geo', 'member', 'member_five', 'km'),
+            '1.8573'
+        );
+
+        #test geoRadius
+        $this->assertEquals(
+            $this->redis->geoRadius('my-geo', 121.525412, 31.245801, 10, 2, 'km'),
+            ['member', 'member_two']
+        );
+        $this->assertEquals(
+            $this->redis->geoRadius('my-geo', 121.525412, 31.245801, 10, 2, 'km', ['DESC']),
+            ['member_five', 'member_four']
+        );
+
+        $this->assertEquals(
+            $this->redis->geoRadius('my-geo', 121.525412, 31.245801, 10, 2, 'km'),
+            ['member', 'member_two']
+        );
+        $this->assertEquals(
+            $this->redis->geoRadius('my-geo', 121.525412, 31.245801, 10, 2, 'km', ['DESC', 'WITHDIST']),
+            [['member_five', '1.8572'], ['member_four', '1.6229']]
+        );
+
+        #test geoRadiusByMember
+        $this->assertEquals(
+            $this->redis->geoRadiusByMember('my-geo', 'member', 10, 2, 'km'),
+            ['member', 'member_two']
+        );
+        $this->assertEquals(
+            $this->redis->geoRadiusByMember('my-geo', 'member', 10, 2, 'km', ['DESC']),
+            ['member_five', 'member_four']
+        );
+        $this->assertEquals(
+            $this->redis->geoRadiusByMember('my-geo', 'member', 10, 2, 'km'),
+            ['member', 'member_two']
+        );
+        $this->assertEquals(
+            $this->redis->geoRadiusByMember('my-geo', 'member', 10, 2, 'km', ['DESC', 'WITHDIST']),
+            [['member_five', '1.8573'], ['member_four', '1.6229']]
+        );
+    }
 }
 ?>
